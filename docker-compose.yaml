@@ -24,12 +24,14 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./init-scripts:/docker-entrypoint-initdb.d:ro
     networks:
-      - backend_network
+      backend_network:
+        ipv4_address: 172.20.0.2  # Static IP for PostgreSQL
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+
   # PgAdmin (PostgreSQL Management)
   pgadmin:
     image: dpage/pgadmin4:8
@@ -48,12 +50,14 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - backend_network
+      backend_network:
+        ipv4_address: 172.20.0.3  # Static IP for pgAdmin
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+
   # Redis Database
   redis:
     image: redis:7-alpine
@@ -72,7 +76,8 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - backend_network
+      backend_network:
+        ipv4_address: 172.20.0.4  # Static IP for Redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -84,6 +89,7 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
   # Redis Insight (GUI for Redis)
   redis-insight:
     image: redis/redisinsight:latest
@@ -97,7 +103,8 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - backend_network
+      backend_network:
+        ipv4_address: 172.20.0.5  # Static IP for Redis Insight
     environment:
       REDISINSIGHT_HOST: 0.0.0.0
       REDISINSIGHT_PORT: 5540
@@ -106,6 +113,34 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # RabbitMQ (Message Broker)
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672" 
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    networks:
+      backend_network:
+        ipv4_address: 172.20.0.6 
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+
 volumes:
   postgres_data:
     driver: local
@@ -115,9 +150,12 @@ volumes:
     driver: local
   redis_insight_data:
     driver: local
+
 networks:
   backend_network:
     driver: bridge
     ipam:
+      driver: default
       config:
         - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
